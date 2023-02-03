@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% load thumbnail %}
+{% block title %} Посты выбранного автора {% endblock %}
+{% block header %}Посты выбранного автора{% endblock %}
+{% block content %}
+  {% load cache %}
+  {% cache 20 index_page %}
+  <div class="container py-5">
+    <h1>{{ title }}</h1>
+    <article>
+      {% for post in page_obj %}
+        <ul>
+          <li>
+            Автор: {{ post.author.get_full_name }}
+          </li>
+          <li>
+            Дата публикации: {{ post.pub_date|date:"d E Y" }}
+          </li>
+        </ul>
+        {% thumbnail post.image "960x339" crop="center" upscale=True as im %}
+          <img class="card-img my-2" src="{{ im.url }}">
+        {% endthumbnail %}
+        <p>{{ post.text }}</p>
+          {% if post.group %}
+            <a href="{% url 'posts:group_posts' post.group.slug %}">все записи группы</a>
+            {% if not forloop.last %}<hr>{% endif %}
+          {% endif %}
+      {% endfor %}
+      {% include 'posts/includes/paginator.html' %}
+    </article>
+  </div>
+  {% endcache %}
+{% endblock %}

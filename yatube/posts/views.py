@@ -10,19 +10,18 @@ from .models import Comment, Follow, Group, Post
 User = get_user_model()
 
 
-def get_page_context(posts, request):
+def get_page_context(request, posts):
     paginator = Paginator(posts, settings.POSTS_ON_PAGE)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    return {
-        'paginator': paginator,
-        'page_number': page_number,
-        'page_obj': page_obj,
-    }
+    return page_obj
 
 
 def index(request):
-    context = get_page_context(Post.objects.all(), request)
+    post_list = Post.objects.all()
+    context = {
+        'page_obj': get_page_context(request, post_list)
+    }
     return render(request, 'posts/index.html', context)
 
 
@@ -31,26 +30,26 @@ def group_posts(request, slug):
     posts = group.posts.all()
     context = {
         'group': group,
-        'posts': posts,
+        'page_obj': get_page_context(request, posts)
     }
-    context.update(get_page_context(posts, request))
     return render(request, 'posts/group_list.html', context)
 
 
 def profile(request, username):
-    # Здесь код запроса к модели и создание словаря контекста
     author = get_object_or_404(User, username=username)
+    post_list = Post.objects.filter(author=author)
     count_post = author.posts.count()
-    following = Follow.objects.filter(user=request.user.id,
-                                      author=author).exists()
-    template = 'posts/profile.html'
+    following = request.user.is_authenticated and Follow.objects.filter(
+        author=author,
+        user=request.user
+    ).exists()
     context = {
         'author': author,
+        'page_obj': get_page_context(request, post_list),
         'count_post': count_post,
-        'following': following
+        'following': following,
     }
-    context.update(get_page_context(author.posts.all(), request))
-    return render(request, template, context)
+    return render(request, 'posts/profile.html', context)
 
 
 def post_detail(request, post_id):
@@ -118,23 +117,22 @@ def add_comment(request, post_id):
 @login_required
 def follow_index(request):
     posts = Post.objects.filter(author__following__user=request.user)
-    context = get_page_context(posts, request)
+    context = {
+        'page_obj': get_page_context(request, posts)
+    }
     return render(request, 'posts/follow.html', context)
 
 
 @login_required
 def profile_follow(request, username):
     author = get_object_or_404(User, username=username)
-    if author != request.user and not Follow.objects.filter(
-        user=request.user, author=author
-    ).exists():
-        Follow.objects.create(user=request.user, author=author)
-    return redirect('posts:follow_index')
+    if request.user != author:
+        Follow.objects.get_or_create(user=request.user, author=author)
+    return redirect('posts:profile', username=username)
 
 
 @login_required
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
-    if Follow.objects.filter(user=request.user, author=author).exists():
-        Follow.objects.get(user=request.user, author=author).delete()
-    return redirect('posts:follow_index')
+    Follow.objects.filter(user=request.user, author=author).delete()
+    return redirect('posts:profile', username=username)

@@ -338,52 +338,88 @@ class CacheViewsTest(TestCase):
         )
 
 
-class FollowViewsTest(TestCase):
+class FollowTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.user = User.objects.create(username='auth')
-        cls.group = Group.objects.create(
-            title='Тестовая группа',
-            slug='test-slug',
-            description='Тестовое описание',
-        )
+        cls.user = User.objects.create_user(username='author')
         cls.post = Post.objects.create(
             author=cls.user,
-            text='Тестовый пост',
-            group=cls.group,
-        )
+            text='Тестовый пост')
 
     def setUp(self):
-        # Создаем неавторизованный клиент
+        # не авторизованный пользователь
         self.guest_client = Client()
-        # Создаем второй клиент
-        self.authorized_client = Client()
-        # Авторизуем пользователя
-        self.authorized_client.force_login(self.user)
+        # авторизованный пользователь 1
+        self.user_1 = User.objects.create_user(username='auth1')
+        self.authorized_client_1 = Client()
+        self.authorized_client_1.force_login(self.user_1)
+        # авторизованный пользователь 2
+        self.user_2 = User.objects.create_user(username='auth2')
+        self.authorized_client_2 = Client()
+        self.authorized_client_2.force_login(self.user_2)
+        # авторизованный пользователь 3
+        self.user_3 = User.objects.create_user(username='auth3')
+        self.authorized_client_3 = Client()
+        self.authorized_client_3.force_login(self.user_3)
 
-    def test_follow_page(self):
-        """Проверка подписки/отписки и страницу избранных постов."""
-        # Проверяем пустую страницу подписок
-        response = self.authorized_client.get(reverse('posts:follow_index'))
-        self.assertEqual(len(response.context['page_obj']), 0)
-        # Проверка подписку на автора поста
-        new_author = User.objects.create(username='Новый автор')
-        self.authorized_client.post(
-            reverse('posts:profile_follow', kwargs={'username': new_author}))
-        self.assertIs(
-            Follow.objects.filter(user=self.user,
-                                  author=new_author).exists(), True)
-        # Проверка что пост не появился в избранных у юзера-обычного
-        new_user = User.objects.create(username='New User')
-        self.authorized_client.force_login(new_user)
-        self.assertIs(
-            Follow.objects.filter(user=new_user,
-                                  author=new_author).exists(), False)
-        # Проверка отписки от автора поста
-        self.authorized_client.force_login(self.user)
-        self.authorized_client.post(
-            reverse('posts:profile_unfollow', kwargs={'username': new_author}))
-        self.assertIs(
-            Follow.objects.filter(user=self.user,
-                                  author=new_author).exists(), False)
+    def test_follow(self):
+        """Проверка подписки авторизованного пользователя
+        на других пользователей."""
+        posts_count = Follow.objects.filter(user=self.user_1).count()
+        response = self.authorized_client_1.post(
+            reverse('posts:profile_follow', kwargs={
+                'username': self.user_2})
+        )
+        self.assertRedirects(response, reverse(
+            'posts:profile', kwargs={
+                'username': self.user_2})
+        )
+        posts_count_2 = Follow.objects.filter(user=self.user_1).count()
+        self.assertEqual(posts_count_2, posts_count + 1)
+        response = self.authorized_client_1.post(
+            reverse('posts:profile_unfollow', kwargs={
+                'username': self.user_2})
+        )
+        posts_count_2 = Follow.objects.filter(user=self.user_1).count()
+        self.assertEqual(posts_count_2, posts_count)
+
+    def test_unfollow(self):
+        """Проверяем что авторизованный пользователь может удалять
+        подписки."""
+        Follow.objects.create(user=self.user_1,
+                              author=self.user_2)
+        posts_count = Follow.objects.filter(user=self.user_1).count()
+        response = self.authorized_client_1.post(
+            reverse('posts:profile_unfollow', kwargs={
+                'username': self.user_2})
+        )
+        self.assertRedirects(response, reverse(
+            'posts:profile', kwargs={
+                'username': self.user_2})
+        )
+        posts_count_2 = Follow.objects.filter(user=self.user_1).count()
+        self.assertEqual(posts_count_2, posts_count - 1)
+
+    def test_new_post(self):
+        """Проверяем что новая запись пользователя появляется в ленте тех,
+        кто на него подписан и не появляется в ленте тех, кто не подписан."""
+        Follow.objects.create(user=self.user_1,
+                              author=self.user_2)
+        response = self.authorized_client_3.get(reverse('posts:follow_index'))
+        posts_count = len(response.context['page_obj'])
+        self.assertEqual(posts_count, 0)
+        response = self.authorized_client_1.get(reverse('posts:follow_index'))
+        posts_count = len(response.context['page_obj'])
+        self.assertEqual(posts_count, 0)
+        self.authorized_client_2.post(
+            reverse('posts:post_create'),
+            data={'text': 'Тестовый пост 2'},
+            follow=True
+        )
+        response = self.authorized_client_1.get(reverse('posts:follow_index'))
+        posts_count_2 = len(response.context['page_obj'])
+        self.assertEqual(posts_count_2, 1)
+        response = self.authorized_client_3.get(reverse('posts:follow_index'))
+        posts_count = len(response.context['page_obj'])
+        self.assertEqual(posts_count, 0)

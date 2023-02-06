@@ -29,6 +29,10 @@ class PostPagesTests(TestCase):
         cls.POST_ID = f'/posts/{cls.post.id}/'
         cls.POST_ID_EDIT = f'/posts/{cls.post.id}/edit/'
         cls.CREATE = '/create/'
+        cls.ADD_COMMENT = f'/posts/{cls.post.id}/comment/'
+        cls.FOLLOW = '/follow/'
+        cls.PROFILE_FOLLOW = f'/profile/{cls.user.username}/follow/'
+        cls.PROFILE_UNFOLLOW = f'/profile/{cls.user.username}/unfollow/'
         cls.templates_url_names = {
             cls.INDEX: 'posts/index.html',
             cls.GROUP: 'posts/group_list.html',
@@ -36,6 +40,7 @@ class PostPagesTests(TestCase):
             cls.POST_ID: 'posts/post_detail.html',
             cls.POST_ID_EDIT: 'posts/create_post.html',
             cls.CREATE: 'posts/create_post.html',
+            cls.FOLLOW: 'posts/follow.html',
         }
 
     def setUp(self):
@@ -98,3 +103,41 @@ class PostPagesTests(TestCase):
         """Страница /unexisting_page/ ведёт к ошибке."""
         response = self.authorized_client.get('/unexisting_page/')
         self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
+
+    def test_add_comment_url_exists_at_desired_location(self):
+        """Страница /posts/<int:post_id>/comment/
+        доступна только авторизованному пользователю. Произойдёт
+        редирект на страницу /posts/<post_id>/"""
+        response = self.authorized_client.get(self.ADD_COMMENT)
+        self.assertRedirects(response, (self.POST_ID))
+        response = self.guest_client.get(self.ADD_COMMENT, follow=True)
+        self.assertRedirects(
+            response, (f'/auth/login/?next={self.ADD_COMMENT}'))
+
+    def test_follow_url_exists_at_desired_location(self):
+        """Страница /follow/ доступна только авторизованному пользователю."""
+        response = self.authorized_client.get(self.FOLLOW)
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        response = self.guest_client.get(self.FOLLOW, follow=True)
+        self.assertRedirects(
+            response, (f'/auth/login/?next={self.FOLLOW}'))
+
+    def test_profile_follow_url_exists_at_desired_location(self):
+        """Страница /profile/<str:username>/follow/
+        доступна только авторизованному пользователю. Произойдёт
+        редирект на страницу /profile/<str:username>/"""
+        response = self.authorized_client.get(self.PROFILE_FOLLOW)
+        self.assertRedirects(response, (self.PROFILE))
+        response = self.guest_client.get(self.PROFILE_FOLLOW, follow=True)
+        self.assertRedirects(
+            response, (f'/auth/login/?next={self.PROFILE_FOLLOW}'))
+
+    def test_profile_unfollow_url_exists_at_desired_location(self):
+        """Страница /profile/<str:username>/unfollow/
+        доступна только авторизованному пользователю. Произойдёт
+        редирект на страницу /profile/<str:username>/"""
+        response = self.authorized_client.get(self.PROFILE_UNFOLLOW)
+        self.assertRedirects(response, (self.PROFILE))
+        response = self.guest_client.get(self.PROFILE_UNFOLLOW, follow=True)
+        self.assertRedirects(
+            response, (f'/auth/login/?next={self.PROFILE_UNFOLLOW}'))

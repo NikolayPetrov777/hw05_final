@@ -267,7 +267,7 @@ class PostPagesTests(TestCase):
     def test_image_in_page(self):
         """Пост с картинкой создается в БД"""
         self.assertTrue(
-            Post.objects.filter(text='Тестовый текст',
+            Post.objects.filter(text=self.post.text,
                                 image='posts/small.gif').exists())
 
 
@@ -350,18 +350,20 @@ class FollowViewsTest(TestCase):
         '''Посты не доступны пользователю, который не подписался на автора.
            Не происходит увеличение подписок автора'''
         follow_count = Follow.objects.count()
-        new_author = User.objects.create(username='New author')
-        self.authorized_client_1.get(
+        new_author = User.objects.create(username='Very new author')
+        authorized_client = Client()
+        authorized_client.force_login(new_author)
+        authorized_client.get(
             reverse(
                 'posts:profile_follow',
-                kwargs={'username': new_author.username}
+                kwargs={'username': self.user.username}
             )
         )
         self.assertEqual(Follow.objects.count(), follow_count + 1)
-        self.authorized_client_1.get(
+        authorized_client.get(
             reverse(
                 'posts:profile_unfollow',
-                kwargs={'username': new_author.username}
+                kwargs={'username': self.user.username}
             )
         )
         self.assertEqual(Follow.objects.count(), follow_count)
@@ -378,20 +380,26 @@ class FollowViewsTest(TestCase):
             reverse('posts:follow_index'))
         self.assertIn(post, response.context['page_obj'].object_list)
 
-        def test_unfollower_no_see_new_post(self):
-            '''У неподписчика поста нет'''
-        follow_count = Follow.objects.count()
-        self.authorized_client_2.get(
+    def test_unfollower_no_see_new_post(self):
+        '''У неподписчика поста нет'''
+        post = Post.objects.create(
+            author=self.user_1,
+            text='Какой-то текст')
+        new_user = User.objects.create(username='Very new author')
+        authorized_client = Client()
+        authorized_client.force_login(new_user)
+        Follow.objects.create(
+            user=new_user,
+            author=self.user_1)
+        response = authorized_client.get(
+            reverse('posts:follow_index'))
+        self.assertIn(post, response.context['page_obj'].object_list)
+        response = authorized_client.get(
             reverse(
-                'posts:profile_follow',
+                'posts:profile_unfollow',
                 kwargs={'username': self.user_1.username}
             )
         )
-        self.authorized_client_2.post(
-            reverse('posts:profile_unfollow', kwargs={
-                'username': self.user_1})
-        )
-        self.assertEqual(Follow.objects.count(), follow_count - 1)
         self.assertNotIn(Follow.objects.all(),
-                         Follow.objects.filter(user=self.user_2,
+                         Follow.objects.filter(user=new_user,
                                                author=self.user_1))

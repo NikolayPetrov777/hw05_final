@@ -138,7 +138,23 @@ class PostPagesTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.OK)
         # после успешной отправки комментарий появляется на странице поста
         self.assertEqual(Comment.objects.count(), comments_count + 1)
-        self.assertEqual(Comment.objects.count(), comments_count + 1)
-        self.assertTrue(Comment.objects.filter(text='Тестовый комментарий',
-                                               author=self.user,
-                                               post=self.post).exists())
+        first_comment = Comment.objects.first()
+        self.assertEqual(first_comment.text, form_data['text'])
+        self.assertEqual(first_comment.post, self.post)
+        self.assertEqual(first_comment.author, self.user)
+
+    def test_comment_guest_client(self):
+        """Проверяем редирект неавторизованного пользователя
+        при попытке создать комментарий."""
+        form_data = {
+            'text': 'Тестовый комментарий'}
+        response = self.guest_client.post(
+            reverse('posts:add_comment',
+                    kwargs={'post_id': self.post.id}),
+            data=form_data,
+            follow=True
+        )
+        auth = reverse('users:login')
+        add_comment = reverse('posts:add_comment',
+                              kwargs={'post_id': self.post.id})
+        self.assertRedirects(response, (f'{auth}?next={add_comment}'))

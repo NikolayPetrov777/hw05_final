@@ -7,7 +7,6 @@
   {% load cache %}
   {% cache 20 index_page %}
   <div class="container py-5">
-    <h1>{{ title }}</h1>
     <article>
       {% for post in page_obj %}
         {% include 'posts/includes/content.html' %}
